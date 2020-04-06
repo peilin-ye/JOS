@@ -30,7 +30,9 @@ static struct Command commands[] = {
 	{ "showmappings", "Display all of the physical page mappings (or lack thereof) that apply to a particular range of virtual/linear addresses in the currently active address space.", mon_showmappings },
 	{ "chpgperm", "Explicitly set, clear, or change the permissions of any mapping in the current address space", mon_chpgperm},
 	{ "memdump", "Dump the contents of a range of memory given either a virtual or physical address range.", mon_memdump},
-	{ "showpg", "Display useful information of physical pages", mon_showpg},
+	{ "showpg", "Display useful information of physical pages.", mon_showpg},
+	{ "stepi", "Single-step one instruction. Can only be used when the kernel monitor is invoked via the breakpoint exception.", mon_stepi},
+	{ "continue", "Resume normal execution from stepi.", mon_continue}
 };
 
 /***** Implementations of basic kernel monitor commands *****/
@@ -73,6 +75,10 @@ mon_backtrace(int argc, char **argv, struct Trapframe *tf)
 	while (1) {
 		cprintf("  ebp %08x", ebp);
 		cprintf("  eip %08x", *(ebp+1));
+		// Lab 3 note:
+		// Exercise 9: The following line crashes after backtracing into libmain.c
+		// because ebp is too high (0xeebfdff0), and (ebp+5) is higher than USTACKTOP,
+		// which is unmapped.
 		cprintf("  args %08x %08x %08x %08x %08x\n", *(ebp+2), *(ebp+3), *(ebp+4), *(ebp+5), *(ebp+6));
 
 		if (!debuginfo_eip((uintptr_t)*(ebp+1), &info)) {
@@ -351,6 +357,47 @@ mon_showpg(int argc, char **argv, struct Trapframe *tf)
 	return 0;	
 }
 
+int
+mon_stepi(int argc, char **argv, struct Trapframe *tf)
+{
+	if (!tf) {
+		cprintf("stepi: trapframe does not exist!\n");
+		return 0;
+	}
+
+	switch (tf->tf_trapno) {
+	case T_BRKPT:
+		tf->tf_eflags |= FL_TF;
+		return -1;
+	case T_DEBUG:
+		if (tf->tf_eflags & FL_TF) {
+			return -1;
+		}
+	default:
+		cprintf("stepi: monitor must be invoked via breakpoint exception!\n");
+		return 0;
+	}	
+}
+
+int
+mon_continue(int argc, char **argv, struct Trapframe *tf)
+{
+	if (!tf) {
+		cprintf("continue: trapframe does not exist!\n");
+		return 0;
+	}
+
+	if ((tf->tf_trapno == T_DEBUG) | (tf->tf_trapno == T_BRKPT)) {
+		if (tf->tf_eflags & FL_TF) {
+			tf->tf_eflags &= ~FL_TF;
+			return -1;
+		}
+	}
+
+	cprintf("continue: monitor must be invoked via breakpoint or debug exception!\n");
+	return 0;
+}
+
 /***** Kernel monitor command interpreter *****/
 
 #define WHITESPACE "\t\r\n "
@@ -395,6 +442,8 @@ runcmd(char *buf, struct Trapframe *tf)
 	return 0;
 }
 
+// Lab 3 note: All tools written in Lab 2 is not useable to debug user envs,
+// since all of them use kern_pgdir.
 void
 monitor(struct Trapframe *tf)
 {

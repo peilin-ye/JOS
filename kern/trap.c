@@ -1,6 +1,7 @@
 #include <inc/mmu.h>
 #include <inc/x86.h>
 #include <inc/assert.h>
+#include <inc/error.h>
 
 #include <kern/pmap.h>
 #include <kern/trap.h>
@@ -65,6 +66,61 @@ trap_init(void)
 	extern struct Segdesc gdt[];
 
 	// LAB 3: Your code here.
+	void vector0();
+	SETGATE(idt[0], 1, GD_KT, vector0, 0);
+	void vector1();
+	SETGATE(idt[1], 1, GD_KT, vector1, 0);
+	void vector2();
+	SETGATE(idt[2], 1, GD_KT, vector2, 0);
+	void vector3();
+	// Exercise 6: Change to DPL_USER to make this work
+	SETGATE(idt[3], 1, GD_KT, vector3, 3);
+	void vector4();
+	SETGATE(idt[4], 1, GD_KT, vector4, 0);
+	void vector5();
+	SETGATE(idt[5], 1, GD_KT, vector5, 0);
+	void vector6();
+	SETGATE(idt[6], 1, GD_KT, vector6, 0);
+	void vector7();
+	SETGATE(idt[7], 1, GD_KT, vector7, 0);
+	void vector8();
+	SETGATE(idt[8], 1, GD_KT, vector8, 0);
+
+	void vector10();
+	SETGATE(idt[10], 1, GD_KT, vector10, 0);
+	void vector11();
+	SETGATE(idt[11], 1, GD_KT, vector11, 0);
+	void vector12();
+	SETGATE(idt[12], 1, GD_KT, vector12, 0);
+	void vector13();
+	SETGATE(idt[13], 1, GD_KT, vector13, 0);
+	void vector14();
+	SETGATE(idt[14], 1, GD_KT, vector14, 0);
+
+	void vector16();
+	SETGATE(idt[16], 1, GD_KT, vector16, 0);
+	void vector17();
+	SETGATE(idt[17], 1, GD_KT, vector17, 0);
+	void vector18();
+	SETGATE(idt[18], 1, GD_KT, vector18, 0);
+	void vector19();
+	SETGATE(idt[19], 1, GD_KT, vector19, 0);
+
+	void vector32();
+	SETGATE(idt[32], 1, GD_KT, vector32, 0);
+	void vector33();
+	SETGATE(idt[33], 1, GD_KT, vector33, 0);
+	void vector34();
+	SETGATE(idt[34], 1, GD_KT, vector34, 0);
+	void vector35();
+	SETGATE(idt[35], 1, GD_KT, vector35, 0);
+	void vector36();
+	SETGATE(idt[36], 1, GD_KT, vector36, 0);
+	void vector37();
+	SETGATE(idt[37], 1, GD_KT, vector37, 0);
+
+	void vector48();
+	SETGATE(idt[48], 1, GD_KT, vector48, 3); // DPL_USER
 
 	// Per-CPU setup 
 	trap_init_percpu();
@@ -145,13 +201,47 @@ trap_dispatch(struct Trapframe *tf)
 	// Handle processor exceptions.
 	// LAB 3: Your code here.
 
-	// Unexpected trap: The user process or the kernel has a bug.
-	print_trapframe(tf);
-	if (tf->tf_cs == GD_KT)
-		panic("unhandled trap in kernel");
-	else {
-		env_destroy(curenv);
-		return;
+	switch (tf->tf_trapno) {
+	case T_DEBUG:
+		monitor(tf);
+		break;
+	case T_BRKPT:
+		monitor(tf);
+		break;
+	case T_PGFLT:
+		if ((tf->tf_cs & 3) == 0) {	// kernel mode
+			panic("trap_dispatch: page fault happened in kernel mode!\n");
+		}
+		else {
+			page_fault_handler(tf);
+			break;
+		}
+	case T_SYSCALL:;	// a label can only be part of a statement and a declaration is not a statement
+		uint32_t ret = syscall(tf->tf_regs.reg_eax,	\
+							   tf->tf_regs.reg_edx,	\
+							   tf->tf_regs.reg_ecx,	\
+							   tf->tf_regs.reg_ebx,	\
+							   tf->tf_regs.reg_edi,	\
+							   tf->tf_regs.reg_esi);
+		if (ret == -E_INVAL)
+			panic("unknown syscall\n");
+
+		tf->tf_regs.reg_eax = ret;
+		break;
+
+	// There are just so many types of exceptions and I don't feel like 
+	// handling all of them this time. By default the user env is destroyed,
+	// which is sufficient to pass part A. Will come back after better 
+	// understanding these exceptions.
+	default:
+		// Unexpected trap: The user process or the kernel has a bug.
+		print_trapframe(tf);
+		if (tf->tf_cs == GD_KT)
+			panic("unhandled trap in kernel\n");
+		else {
+			env_destroy(curenv);
+			return;
+		}
 	}
 }
 

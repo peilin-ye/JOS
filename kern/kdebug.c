@@ -2,6 +2,7 @@
 #include <inc/string.h>
 #include <inc/memlayout.h>
 #include <inc/assert.h>
+#include <inc/error.h>
 
 #include <kern/kdebug.h>
 #include <kern/pmap.h>
@@ -142,6 +143,9 @@ debuginfo_eip(uintptr_t addr, struct Eipdebuginfo *info)
 		// Make sure this memory is valid.
 		// Return -1 if it is not.  Hint: Call user_mem_check.
 		// LAB 3: Your code here.
+		// permission should be read-write.
+		if (user_mem_check(curenv, (void *)usd, sizeof(struct UserStabData), PTE_U | PTE_W) == -E_FAULT)
+			return -1;
 
 		stabs = usd->stabs;
 		stab_end = usd->stab_end;
@@ -150,6 +154,10 @@ debuginfo_eip(uintptr_t addr, struct Eipdebuginfo *info)
 
 		// Make sure the STABS and string table memory is valid.
 		// LAB 3: Your code here.
+		if (user_mem_check(curenv, (void *)stabs, stab_end - stabs, PTE_U | PTE_W) == -E_FAULT)
+			return -1;
+		if (user_mem_check(curenv, (void *)stabstr, stabstr_end - stabstr, PTE_U | PTE_W) == -E_FAULT)
+			return -1;
 	}
 
 	// String table validity checks
