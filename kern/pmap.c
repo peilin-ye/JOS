@@ -276,7 +276,10 @@ mem_init_mp(void)
 	//     Permissions: kernel RW, user NONE
 	//
 	// LAB 4: Your code here:
-
+	for (int i = 0; i < NCPU; i++) {
+		uintptr_t kstacktop_i = KSTACKTOP - i * (KSTKSIZE + KSTKGAP);
+		boot_map_region(kern_pgdir, kstacktop_i - KSTKSIZE, KSTKSIZE, PADDR(percpu_kstacks[i]), PTE_W);
+	}
 }
 
 // --------------------------------------------------------------
@@ -323,10 +326,18 @@ page_init(void)
 	i++;
 	// 2)
 	for (; i < npages_basemem; i++) {
+		// Lab 4: mark the physical page at MPENTRY_PADDR as in use,
+		// and don't add it into page_free_list:
+		if (i == MPENTRY_PADDR / PGSIZE) {
+			pages[i].pp_ref = 1;
+			pages[i].pp_link = NULL;
+			continue;
+		}
 		pages[i].pp_ref = 0;
 		pages[i].pp_link = page_free_list;
 		page_free_list = &pages[i];
 	}
+	cprintf("page_init: npages_basemem: %x\n", npages_basemem);
 	// 3)
 	for (; i*PGSIZE < EXTPHYSMEM; i++) {
 		pages[i].pp_ref = 1;
@@ -567,7 +578,7 @@ page_lookup(pde_t *pgdir, void *va, pte_t **pte_store)
 		*pte_store = pte;
 	}
 
-	return pa2page(*pte & ~0xFFF);
+	return pa2page(*pte & ~0xFFF);	// Lab 4 yourself: You have a macro for this...
 }
 
 //
@@ -645,7 +656,13 @@ mmio_map_region(physaddr_t pa, size_t size)
 	// Hint: The staff solution uses boot_map_region.
 	//
 	// Your code here:
-	panic("mmio_map_region not implemented");
+	size = ROUNDUP(size, PGSIZE);
+	if (base + size > MMIOLIM)
+		panic("mmio_map_region: cannot be higher than MMIOLIM!\n");
+
+	boot_map_region(kern_pgdir, base, size, pa, (PTE_PCD | PTE_PWT | PTE_W));
+	base += size;
+	return (void *)(base - size);
 }
 
 static uintptr_t user_mem_check_addr;
@@ -679,24 +696,23 @@ user_mem_check(struct Env *env, const void *va, size_t len, int perm)
 	
 	char *pva = (char *) va;
 	pte_t *pte;
-	
 	for (; pva < (char *) ROUNDUP(va+len, PGSIZE); pva = ROUNDDOWN(pva+PGSIZE, PGSIZE)) {
 		if (pva >= (char *) ULIM) {
-			cprintf("user_mem_check: address is above ULIM!\n");
+			// cprintf("user_mem_check: address is above ULIM!\n");
 			goto bad;
 		}
 
 		pte = pgdir_walk(env->env_pgdir, (void *)pva, 0);
 		if (!pte) {
-			cprintf("user_mem_check: page table does not exist!\n");
+			// cprintf("user_mem_check: page table does not exist!\n");
 			goto bad;
 		}
 		if ((*pte & PTE_P) == 0) {
-			cprintf("user_mem_check: page table entry does not exist!\n");
+			// cprintf("user_mem_check: page table entry does not exist!\n");
 			goto bad;
 		}
 		if ((*pte & perm) != perm) {
-			cprintf("user_mem_check: permission denied!\n");
+			// cprintf("user_mem_check: permission denied!\n");
 			goto bad;
 		}
 	}
