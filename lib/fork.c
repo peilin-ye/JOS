@@ -44,6 +44,8 @@ pgfault(struct UTrapframe *utf)
 	memcpy((void *)PFTEMP, (void *)ROUNDDOWN(addr, PGSIZE), PGSIZE);
 	if ((rc = sys_page_map(eid, (void *)PFTEMP, eid, (void *)ROUNDDOWN(addr, PGSIZE), (PTE_U|PTE_W))) < 0)
 		panic("pgfault: sys_page_map() failed: %e\n", rc);
+	if ((rc = sys_page_unmap(eid, (void *)PFTEMP)) < 0)
+		panic("pgfault: sys_page_unmap() failed: %e\n", rc);
 }
 
 //

@@ -660,7 +660,7 @@ mmio_map_region(physaddr_t pa, size_t size)
 	if (base + size > MMIOLIM)
 		panic("mmio_map_region: cannot be higher than MMIOLIM!\n");
 
-	boot_map_region(kern_pgdir, base, size, pa, (PTE_PCD | PTE_PWT | PTE_W));
+	boot_map_region(kern_pgdir, base, size, pa, (PTE_PCD|PTE_PWT|PTE_W));
 	base += size;
 	return (void *)(base - size);
 }
