@@ -302,6 +302,27 @@ static int
 copy_shared_pages(envid_t child)
 {
 	// LAB 5: Your code here.
+	extern volatile pde_t uvpd[];
+	extern volatile pte_t uvpt[];
+	int r;
+
+	for (uintptr_t va = 0; va < UTOP;) {
+		if ((uvpd[va >> PDXSHIFT] & PTE_P) == 0) {	// Page table not mapped.
+			va += NPTENTRIES * PGSIZE;
+			continue;
+		}
+
+		int perm = uvpt[va >> PTXSHIFT] & PTE_SYSCALL;
+		if ((perm & PTE_P) == 0) {	// Page not mapped.
+			va += PGSIZE;
+			continue;
+		}
+		if (perm & PTE_SHARE) {
+			if ((r = sys_page_map(thisenv->env_id, (void *)va, child, (void *)va, perm)) < 0)
+				return r;
+		}
+		va += PGSIZE;
+	}
 	return 0;
 }
 
