@@ -63,19 +63,22 @@ static int
 duppage(envid_t ceid, unsigned pn)
 {
 	// LAB 4: Your code here.
-	int rc;
+	int r;
 	extern volatile pte_t uvpt[];
 	envid_t peid = sys_getenvid();
 	intptr_t va = (intptr_t)(pn * PGSIZE);
 
-	if (uvpt[pn] & (PTE_COW|PTE_W)) {
-		if ((rc = sys_page_map(peid, (void *)va, ceid, (void *)va, (PTE_COW|PTE_U))) < 0)
-			return rc;
-		if ((rc = sys_page_map(peid, (void *)va, peid, (void *)va, (PTE_COW|PTE_U))) < 0)
-			return rc;
+	if (uvpt[pn] & PTE_SHARE) {
+		if ((r = sys_page_map(peid, (void *)va, ceid, (void *)va, uvpt[pn] & PTE_SYSCALL)) < 0)
+			return r;
+	} else if (uvpt[pn] & (PTE_COW|PTE_W)) {
+		if ((r = sys_page_map(peid, (void *)va, ceid, (void *)va, (PTE_COW|PTE_U))) < 0)
+			return r;
+		if ((r = sys_page_map(peid, (void *)va, peid, (void *)va, (PTE_COW|PTE_U))) < 0)
+			return r;
 	} else {
-		if ((rc = sys_page_map(peid, (void *)va, ceid, (void *)va, PTE_U)) < 0)
-			return rc;
+		if ((r = sys_page_map(peid, (void *)va, ceid, (void *)va, PTE_U)) < 0)
+			return r;
 	}
 	return 0;
 }
