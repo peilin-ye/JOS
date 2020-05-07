@@ -11,6 +11,8 @@
 #include <kern/syscall.h>
 #include <kern/console.h>
 #include <kern/sched.h>
+#include <kern/time.h>
+#include <kern/e1000.h>
 
 // Print a string to the system console.
 // The string is exactly 'len' characters long.
@@ -58,10 +60,6 @@ sys_env_destroy(envid_t envid)
 
 	if ((r = envid2env(envid, &e, 1)) < 0)
 		return r;
-	if (e == curenv)
-		cprintf("[%08x] exiting gracefully\n", curenv->env_id);
-	else
-		cprintf("[%08x] destroying %08x\n", curenv->env_id, e->env_id);
 	env_destroy(e);
 	return 0;
 }
@@ -125,6 +123,33 @@ sys_env_set_status(envid_t envid, int status)
 		return -E_BAD_ENV;
 
 	e->env_status = status;
+	return 0;
+}
+
+// Set envid's trap frame to 'tf'.
+// tf is modified to make sure that user environments always run at code
+// protection level 3 (CPL 3), interrupts enabled, and IOPL of 0.
+//
+// Returns 0 on success, < 0 on error.  Errors are:
+//	-E_BAD_ENV if environment envid doesn't currently exist,
+//		or the caller doesn't have permission to change envid.
+static int
+sys_env_set_trapframe(envid_t envid, struct Trapframe *tf)
+{
+	// LAB 5: Your code here.
+	// Remember to check whether the user has supplied us with a good
+	// address!
+	struct Env *e;
+	int r;
+
+	if ((r = envid2env(envid, &e, 1)) < 0)
+		return r;
+	user_mem_assert(curenv, (void *)tf, sizeof(struct Trapframe), 0);	// It's ok to be read-only.
+	
+	memmove(&e->env_tf, tf, sizeof(struct Trapframe));
+	e->env_tf.tf_cs |= 3;
+	e->env_tf.tf_eflags |= FL_IF;
+	e->env_tf.tf_eflags &= ~FL_IOPL_MASK;	// Can't do |= FL_IOPL_0...*sigh*
 	return 0;
 }
 
@@ -339,7 +364,7 @@ sys_ipc_try_send(envid_t envid, uint32_t value, void *srcva, unsigned perm)
 			return -E_INVAL;
 		if (((perm & PTE_U) != PTE_U) || ((perm & ~PTE_SYSCALL) != 0))
 			return -E_INVAL;
-
+		
 		pte_t *pte;
 		struct PageInfo *pp = page_lookup(curenv->env_pgdir, srcva, &pte);
 		if (!pp)	
@@ -393,6 +418,32 @@ sys_ipc_recv(void *dstva)
 	return 0;
 }
 
+// Return the current time.
+static int
+sys_time_msec(void)
+{
+	// LAB 6: Your code here.
+	return time_msec();
+}
+
+// Send a packet.
+static int
+sys_tx_pkt(const char *buf, size_t nbytes)
+{
+	user_mem_assert(curenv, (void *)buf, nbytes, 0);	// It's ok to be read-only.
+	return tx_pkt(buf, nbytes);
+}
+
+// Receive a packet.
+static int
+sys_rx_pkt(char *buf)
+{
+	user_mem_assert(curenv, (void *)buf, DESC_BUF_SZ, 0);	// It's ok to be read-only.
+	// I shouldn't do a loop since there's only one kernel thread and I
+	// can't block it...
+	return rx_pkt(buf);
+}
+
 // Dispatches to the correct kernel function, passing the arguments.
 int32_t
 syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, uint32_t a5)
@@ -421,6 +472,8 @@ syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, 
 		return (int32_t) sys_exofork();
 	case SYS_env_set_status:
 		return (int32_t) sys_env_set_status((envid_t)a1, (int)a2); 
+	case SYS_env_set_trapframe:
+		return (int32_t) sys_env_set_trapframe((envid_t)a1, (struct Trapframe *)a2);
 	case SYS_env_set_pgfault_upcall:
 		return (int32_t) sys_env_set_pgfault_upcall((envid_t)a1, (void *)a2);
 	case SYS_yield:
@@ -432,6 +485,12 @@ syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, 
 		// this syscall calls sys_yield(). this will never return if successful
 		// does return error code, though.
 		return (int32_t) sys_ipc_recv((void *)a1);
+	case SYS_time_msec:
+		return (int32_t) sys_time_msec();
+	case SYS_tx_pkt:
+		return (int32_t) sys_tx_pkt((const char *)a1, (size_t)a2);
+	case SYS_rx_pkt:
+		return (int32_t) sys_rx_pkt((char *)a1);
 	default:
 		return -E_UNSPECIFIED;
 	}
