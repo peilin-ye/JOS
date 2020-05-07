@@ -7,6 +7,8 @@
 #include <inc/mmu.h>
 #include <lwip/sockets.h>
 
+#define NS_BUFSIZE     2048    // 3.2.2 Receive Data Storage
+
 struct jif_pkt {
 	int jp_len;
 	char jp_data[0];

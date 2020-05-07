@@ -26,6 +26,10 @@ enum {
 	E_NOT_EXEC	,	// File not a valid executable
 	E_NOT_SUPP	,	// Operation not supported
 
+	// Lab 6: Network driver error codes
+	E_TX_FULL,		// tdr queue is full
+	E_RX_EMPTY,		// rdr queue is empty
+
 	MAXERROR
 };
 

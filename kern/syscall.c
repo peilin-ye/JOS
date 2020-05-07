@@ -12,6 +12,7 @@
 #include <kern/console.h>
 #include <kern/sched.h>
 #include <kern/time.h>
+#include <kern/e1000.h>
 
 // Print a string to the system console.
 // The string is exactly 'len' characters long.
@@ -363,7 +364,7 @@ sys_ipc_try_send(envid_t envid, uint32_t value, void *srcva, unsigned perm)
 			return -E_INVAL;
 		if (((perm & PTE_U) != PTE_U) || ((perm & ~PTE_SYSCALL) != 0))
 			return -E_INVAL;
-
+		
 		pte_t *pte;
 		struct PageInfo *pp = page_lookup(curenv->env_pgdir, srcva, &pte);
 		if (!pp)	
@@ -422,7 +423,25 @@ static int
 sys_time_msec(void)
 {
 	// LAB 6: Your code here.
-	panic("sys_time_msec not implemented");
+	return time_msec();
+}
+
+// Send a packet.
+static int
+sys_tx_pkt(const char *buf, size_t nbytes)
+{
+	user_mem_assert(curenv, (void *)buf, nbytes, 0);	// It's ok to be read-only.
+	return tx_pkt(buf, nbytes);
+}
+
+// Receive a packet.
+static int
+sys_rx_pkt(char *buf)
+{
+	user_mem_assert(curenv, (void *)buf, DESC_BUF_SZ, 0);	// It's ok to be read-only.
+	// I shouldn't do a loop since there's only one kernel thread and I
+	// can't block it...
+	return rx_pkt(buf);
 }
 
 // Dispatches to the correct kernel function, passing the arguments.
@@ -466,6 +485,12 @@ syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, 
 		// this syscall calls sys_yield(). this will never return if successful
 		// does return error code, though.
 		return (int32_t) sys_ipc_recv((void *)a1);
+	case SYS_time_msec:
+		return (int32_t) sys_time_msec();
+	case SYS_tx_pkt:
+		return (int32_t) sys_tx_pkt((const char *)a1, (size_t)a2);
+	case SYS_rx_pkt:
+		return (int32_t) sys_rx_pkt((char *)a1);
 	default:
 		return -E_UNSPECIFIED;
 	}

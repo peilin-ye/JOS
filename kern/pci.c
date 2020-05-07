@@ -31,6 +31,7 @@ struct pci_driver pci_attach_class[] = {
 // pci_attach_vendor matches the vendor ID and device ID of a PCI device. key1
 // and key2 should be the vendor ID and device ID respectively
 struct pci_driver pci_attach_vendor[] = {
+	{ PCI_E1000_VENDOR_ID, PCI_E1000_DEVICE_ID, &e1000_attach },
 	{ 0, 0, 0 },
 };
 
@@ -138,7 +139,7 @@ pci_scan_bus(struct pci_bus *bus)
 		totaldev++;
 
 		struct pci_func f = df;
-		for (f.func = 0; f.func < (PCI_HDRTYPE_MULTIFN(bhlc) ? 8 : 1);
+		for (f.func = 0; f.func < (PCI_HDRTYPE_MULTIFN(bhlc) ? 8 : 1); // PCI header type multi-function
 		     f.func++) {
 			struct pci_func af = f;
 

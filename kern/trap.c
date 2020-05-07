@@ -276,18 +276,21 @@ trap_dispatch(struct Trapframe *tf)
 	// Handle clock interrupts. Don't forget to acknowledge the
 	// interrupt using lapic_eoi() before calling the scheduler!
 	// LAB 4: Your code here.
+
 	case IRQ_OFFSET + IRQ_TIMER:
 		lapic_eoi();
+
+		// Add time tick increment to clock interrupts.
+		// Be careful! In multiprocessors, clock interrupts are
+		// triggered on every CPU.
+		// LAB 6: Your code here.
+		if (thiscpu == bootcpu)
+			time_tick();
+
 		sched_yield();
 		// shouldn't reach here...
 		panic("trap_dispatch: IRQ_TIMER: sched_yield() returned!\n");
-
-	// Add time tick increment to clock interrupts.
-	// Be careful! In multiprocessors, clock interrupts are
-	// triggered on every CPU.
-	// LAB 6: Your code here.
-
-
+	
 	// Handle keyboard and serial interrupts.
 	// LAB 5: Your code here.
 	case IRQ_OFFSET + IRQ_KBD:
@@ -317,8 +320,9 @@ trap_dispatch(struct Trapframe *tf)
 		// obviously have other meanings...
 		if (ret == -E_UNSPECIFIED)
 			panic("trap_dispatch: unknown syscall\n");
-		if (ret == -E_INVAL)		
+		if (ret == -E_INVAL) {	
 			panic("trap_dispatch: syscall() returned -E_INVAL\n");
+		}
 		tf->tf_regs.reg_eax = ret;
 		break;
 
